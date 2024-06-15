@@ -1,0 +1,711 @@
+classdef AppGermanPanda < matlab.apps.AppBase
+
+    % Properties that correspond to app components
+    properties (Access = public)
+        UIFigure                     matlab.ui.Figure
+        Exit                         matlab.ui.control.Image
+        MusicOnButton                matlab.ui.control.Button
+        AddyourownwordsLabel         matlab.ui.control.Label
+        Arrow                        matlab.ui.control.Image
+        AddButton                    matlab.ui.control.Button
+        GermanMeaningEditField       matlab.ui.control.EditField
+        GermanMeaningEditFieldLabel  matlab.ui.control.Label
+        EnglishWordEditField         matlab.ui.control.EditField
+        EnglishWordEditFieldLabel    matlab.ui.control.Label
+        ResetHighScoreButton         matlab.ui.control.Button
+        HighScoreNumber              matlab.ui.control.Label
+        HighScoreLabel               matlab.ui.control.Label
+        Quit                         matlab.ui.control.Button
+        GOAGAINBacktoStartButton     matlab.ui.control.Button
+        FinalScore                   matlab.ui.control.Label
+        YourScoreLabel               matlab.ui.control.Label
+        Instructions                 matlab.ui.control.Label
+        GermanPandaLabel             matlab.ui.control.Label
+        Logo                         matlab.ui.control.Image
+        StartGameButton              matlab.ui.control.Button
+        Heart1                       matlab.ui.control.Image
+        Heart2                       matlab.ui.control.Image
+        Heart3                       matlab.ui.control.Image
+        ScoreNumber                  matlab.ui.control.Label
+        TimerNumber                  matlab.ui.control.Label
+        Question                     matlab.ui.control.Label
+        TimerLabel                   matlab.ui.control.Label
+        ScoreLabel                   matlab.ui.control.Label
+        Bar                          matlab.ui.control.Image
+        Label3                       matlab.ui.control.Label
+        Label2                       matlab.ui.control.Label
+        Label1                       matlab.ui.control.Label
+        img3                         matlab.ui.control.Image
+        img2                         matlab.ui.control.Image
+        img1                         matlab.ui.control.Image
+        Panda                        matlab.ui.control.Image
+        Image2                       matlab.ui.control.Image
+    end
+
+    
+    properties (Access = private)
+        pandaPos = 290; % panda in the middle
+        speed = 1; % pixels per 0.02 seconds
+        speedMultiplier = 45; % how fast speed increases with score
+        timerDuration = 70; % 70 second timer
+        gamemode = 0; % 1=play, anything else = dont play
+        score = 0; % score!
+        lives = 3; % lives!
+        randomLabel = 0; 
+        randomIndex = 0;
+        refreshRate = 0.02; % loop runs every 0.02 seconds, 50 fps
+        musicOn = true;
+        y1;y2;y3;y4;Fs1;Fs2;Fs3;Fs4;song;lifeloss;point;done; % sound variables
+        
+
+    end
+    
+    methods (Access = private)
+        
+        function StartGame(app)
+            
+            app.ResetPositions(); % put the labels back to the top
+            
+            if app.musicOn
+                play(app.song); % begin the ost, (Tenten's theme from naruto)
+            end
+            while app.gamemode==1
+                
+                pause(app.refreshRate); % every 0.02 seconds...
+                
+                app.img1.Position(2) = app.img1.Position(2) - (app.speed + app.score/app.speedMultiplier);
+                app.img2.Position(2) = app.img2.Position(2) - (app.speed + app.score/app.speedMultiplier);
+                app.img3.Position(2) = app.img3.Position(2) - (app.speed + app.score/app.speedMultiplier);
+                app.Label1.Position(2) = app.Label1.Position(2) - (app.speed + app.score/app.speedMultiplier);
+                app.Label2.Position(2) = app.Label2.Position(2) - (app.speed + app.score/app.speedMultiplier);
+                app.Label3.Position(2) = app.Label3.Position(2) - (app.speed + app.score/app.speedMultiplier);
+                % ...the labels fall, total speed is based on score.
+
+                app.CheckForCollision(); % check if panda is touching 
+
+                app.ScoreNumber.Text = num2str(app.score); % update score
+
+                app.UpdateLives(); % update hearts display
+
+                app.UpdateTimer(); % timer goes down based on refresh rate
+
+            end
+
+            stop(app.song); % stop the beautiful song
+            app.EndGame(); % end game screen (just hiding stuff and unhiding other stuff)
+            app.HighScore(); % check if user got high score
+                
+        end
+        
+        function ResetPositions(app)
+            data = readtable('words.xlsx'); % read the word database
+    
+            englishWords = data{:,1}; % english words column 1
+            germanWords = data{:,2}; % german words column 2
+            
+            app.randomIndex = randi(size(englishWords,1)); % pick a random english word
+            app.randomLabel = randi(3); % this is to determine which label it goes to in game
+            app.Question.Text = englishWords(app.randomIndex); % display english counterpart of the word
+
+            randomOption1 = randi(length(englishWords)); % one random option
+            while randomOption1 == app.randomIndex % can't be the same as the corect answer
+                randomOption1 = randi(length(englishWords));
+            end
+            randomOption2 = randi(length(englishWords)); % the other random option
+            while randomOption2 == app.randomIndex || randomOption2 == randomOption1 % can't be same as anything
+                randomOption2 = randi(length(englishWords));
+            end
+
+            switch app.randomLabel
+                case 1 % if correct answer in label 1
+                    app.Label1.Text = germanWords(app.randomIndex); % display it
+                    app.Label2.Text = germanWords(randomOption1);
+                    app.Label3.Text = germanWords(randomOption2);
+                case 2 % same thing here but for label 2 correct answer
+                    app.Label2.Text = germanWords(app.randomIndex);
+                    app.Label1.Text = germanWords(randomOption1);
+                    app.Label3.Text = germanWords(randomOption2);
+                case 3 % again for label 3
+                    app.Label3.Text = germanWords(app.randomIndex);
+                    app.Label1.Text = germanWords(randomOption1);
+                    app.Label2.Text = germanWords(randomOption2);
+            end
+
+            app.img1.Position = [85 704 100 39]; % and reset the physical positions
+            app.img2.Position = [270 704 100 39];
+            app.img3.Position = [455 704 100 39];
+            app.Label1.Position = [86 707 98 31];
+            app.Label2.Position = [271 707 98 31];
+            app.Label3.Position = [456 707 98 31];
+        end
+        
+        function CheckForCollision(app)
+            if app.img1.Position(2) < 60
+                    % missed
+                    app.ResetPositions();
+                    app.score = app.score-5;
+            elseif app.randomLabel == 1
+                if app.img1.Position(2) < 139 && (app.Panda.Position(1) >= app.Label1.Position(1)-app.Panda.Position(3) && app.Panda.Position(1) <= app.Label1.Position(1)+app.Label1.Position(3))
+                    % if labels are low enough and panda's x-position is...
+                    % ... within the boundaries of label 1
+                    % correct
+                    app.ResetPositions();
+                    app.score = app.score+10;
+                    play(app.point);
+                elseif app.img1.Position(2) < 139 && ((app.Panda.Position(1) >= app.Label2.Position(1)-app.Panda.Position(3) && app.Panda.Position(1) <= app.Label2.Position(1)+app.Label1.Position(3)) || (app.Panda.Position(1) >= app.Label3.Position(1)-app.Panda.Position(3) && app.Panda.Position(1) <= app.Label3.Position(1)+app.Label1.Position(3)))
+                    % any other label its wrong
+                    % wrong
+                    app.ResetPositions();
+                    app.lives = app.lives-1;
+                    play(app.lifeloss);
+                end
+            elseif app.randomLabel == 2
+                if app.img1.Position(2) < 139 && (app.Panda.Position(1) >= app.Label2.Position(1)-app.Panda.Position(3) && app.Panda.Position(1) <= app.Label2.Position(1)+app.Label1.Position(3))
+                    % similar thing but for label 2
+                    % the code is the exact same, just labels swapped
+                    % correct
+                    app.ResetPositions();
+                    app.score = app.score+10;
+                    play(app.point);
+                elseif app.img1.Position(2) < 139 && ((app.Panda.Position(1) >= app.Label1.Position(1)-app.Panda.Position(3) && app.Panda.Position(1) <= app.Label1.Position(1)+app.Label1.Position(3)) || (app.Panda.Position(1) >= app.Label3.Position(1)-app.Panda.Position(3) && app.Panda.Position(1) <= app.Label3.Position(1)+app.Label1.Position(3)))
+                    % wrong
+                    app.ResetPositions();
+                    app.lives = app.lives-1;
+                    play(app.lifeloss);
+                end
+            elseif app.randomLabel == 3
+                if app.img1.Position(2) < 139 && (app.Panda.Position(1) >= app.Label3.Position(1)-app.Panda.Position(3) && app.Panda.Position(1) <= app.Label3.Position(1)+app.Label1.Position(3))
+                    % correct
+                    app.ResetPositions();
+                    app.score = app.score+10;
+                    play(app.point);
+                elseif app.img1.Position(2) < 139 && ((app.Panda.Position(1) >= app.Label2.Position(1)-app.Panda.Position(3) && app.Panda.Position(1) <= app.Label2.Position(1)+app.Label1.Position(3)) || (app.Panda.Position(1) >= app.Label1.Position(1)-app.Panda.Position(3) && app.Panda.Position(1) <= app.Label1.Position(1)+app.Label1.Position(3)))
+                    % wrong
+                    app.ResetPositions();
+                    app.lives = app.lives-1;
+                    play(app.lifeloss);
+                    
+                end
+            end
+            
+        end
+        
+        function UpdateLives(app)
+            switch app.lives % hide hearts based on lives
+                case 2
+                    app.Heart1.Visible = "off";
+                case 1
+                    app.Heart2.Visible = "off";
+                case 0
+                    app.Heart3.Visible = "off";
+                    app.gamemode = 3;
+            end
+            
+        end
+        
+        function UpdateTimer(app)
+            if app.timerDuration > 0 % if > 0, reduce by refresh rate
+                app.timerDuration = app.timerDuration - app.refreshRate;
+                app.TimerNumber.Text = num2str(ceil(app.timerDuration)); % show an integer amount rounded up
+            else
+                app.gamemode = 3; % if 0, gamemode is not 1, and game loop ends
+            end
+        end
+        
+        function EndGame(app)
+            app.Heart1.Visible = 'off'; app.Heart2.Visible = 'off'; app.Heart3.Visible = 'off';
+            app.ScoreNumber.Visible = 'off'; app.TimerNumber.Visible = 'off'; app.Question.Visible = 'off';
+            app.TimerLabel.Visible = 'off'; app.ScoreLabel.Visible = 'off'; app.Bar.Visible = 'off';
+            app.Panda.Visible = 'off'; app.Exit.Visible = 'off'; % hide game aspects
+
+            app.YourScoreLabel.Visible = 'on'; app.FinalScore.Visible = 'on'; app.GOAGAINBacktoStartButton.Visible = 'on';
+            app.HighScoreNumber.Visible = 'on'; app.HighScoreLabel.Visible = 'on';
+            app.Quit.Visible = 'on'; % show end screen options
+            app.ResetPositions(); % hide the labels back up
+            app.FinalScore.Text = num2str(app.score); % show final score
+            play(app.done); % play cool flute tune (Sleeping Dogs mission complete sound effect)
+        end
+        
+        function HighScore(app)
+            check = fopen('highscore.txt', 'r');
+            highScore = fscanf(check, '%d'); % open high score, check
+            fclose(check);
+            if highScore < app.score % if new score is more than high score
+                new = fopen('highscore.txt', 'w'); % write mode, overwrites everything
+                fprintf(new, '%d', app.score); % new score is written
+                fclose(new);
+                app.HighScoreNumber.Text = num2str(app.score); % and then displayed
+            end
+        end
+    end
+    
+
+    % Callbacks that handle component events
+    methods (Access = private)
+
+        % Code that executes after component creation
+        function startupFcn(app)
+            [app.y1,app.Fs1] = audioread('ost.mp3'); % load up all the audios when game starts
+            app.song = audioplayer(app.y1,app.Fs1);
+            [app.y2,app.Fs2] = audioread('lifeloss.mp3');
+            app.lifeloss = audioplayer(app.y2,app.Fs2);
+            [app.y3,app.Fs3] = audioread('point.mp3');
+            app.point = audioplayer(app.y3,app.Fs3);
+            [app.y4,app.Fs4] = audioread('done.mp3');
+            app.done = audioplayer(app.y4,app.Fs4);
+
+            app.Heart1.Visible = 'off'; app.Heart2.Visible = 'off'; app.Heart3.Visible = 'off';
+            app.ScoreNumber.Visible = 'off'; app.TimerNumber.Visible = 'off'; app.Question.Visible = 'off';
+            app.TimerLabel.Visible = 'off'; app.ScoreLabel.Visible = 'off'; app.Bar.Visible = 'off';
+            app.Panda.Visible = 'off'; app.YourScoreLabel.Visible = 'off'; app.FinalScore.Visible = 'off';
+            app.GOAGAINBacktoStartButton.Visible = 'off'; app.Quit.Visible = 'on'; app.Exit.Visible = 'off';
+            % hide game aspects
+
+            check = fopen('highscore.txt', 'r'); % read the high score...
+            oldHighScore = fscanf(check, '%d');
+            app.HighScoreNumber.Text = num2str(oldHighScore); % ... and display it
+            fclose(check);
+        end
+
+        % Key press function: UIFigure
+        function UIFigureKeyPress(app, event)
+            key = event.Key;
+            if isequal(key, 'leftarrow') && app.pandaPos > 10 && app.gamemode == 1 % if left arrow, and panda is not off the screen
+                app.pandaPos = app.pandaPos-20; 
+                app.Panda.Position(1) = app.pandaPos; % move left 20
+                app.Panda.ImageSource = imread("panda.png");
+            elseif isequal(key, 'rightarrow') && app.pandaPos < 600 && app.gamemode == 1 % same thing for right
+                app.pandaPos = app.pandaPos+20;
+                app.Panda.Position(1) = app.pandaPos;
+                app.Panda.ImageSource = imread("pandaflip.png");
+            end
+            if isequal(key, 'space') && app.gamemode == 1 && app.img1.Position(2) > 150 % hard drop on space, just above collision height
+                app.img1.Position = [85 150 100 37];
+                app.img2.Position = [270 150 100 37];
+                app.img3.Position = [455 150 100 37];
+                app.Label1.Position = [93 153 84 31];
+                app.Label2.Position = [278 153 84 31];
+                app.Label3.Position = [463 153 84 31];
+            end
+        end
+
+        % Button pushed function: StartGameButton
+        function StartGameButtonPushed(app, event)
+            app.StartGameButton.Visible = 'off'; % hide start screen stuff
+            app.Instructions.Visible = 'off';
+            app.GermanPandaLabel.Visible = 'off';
+            app.Logo.Visible = 'off';
+            app.Quit.Visible = 'off';
+            app.Exit.Visible = 'on';
+            app.HighScoreNumber.Visible = 'off'; app.HighScoreLabel.Visible = 'off';
+            app.AddyourownwordsLabel.Visible = 'off'; app.Arrow.Visible = 'off'; app.AddButton.Visible = 'off';
+            app.GermanMeaningEditField.Visible = 'off'; app.EnglishWordEditField.Visible = 'off';
+            app.GermanMeaningEditFieldLabel.Visible = 'off'; app.EnglishWordEditFieldLabel.Visible = 'off';
+            app.Heart1.Visible = 'on'; app.Heart2.Visible = 'on'; app.Heart3.Visible = 'on';
+            app.ScoreNumber.Visible = 'on'; app.TimerNumber.Visible = 'on'; app.Question.Visible = 'on';
+            app.TimerLabel.Visible = 'on'; app.ScoreLabel.Visible = 'on'; app.Bar.Visible = 'on';
+            app.Panda.Visible = 'on'; app.ResetHighScoreButton.Visible = 'off'; app.MusicOnButton.Visible = 'off';
+            % unhide game aspects
+
+            app.UIFigure.focus;
+            app.gamemode = 1; % reset game properties
+            app.score = 0;
+            app.lives = 3;
+            app.randomLabel = 0;
+            app.randomIndex = 0;
+            app.timerDuration = 70;
+            app.StartGame(); % run the main loop
+        end
+
+        % Button pushed function: GOAGAINBacktoStartButton
+        function GOAGAINBacktoStartButtonPushed(app, event)
+            app.StartGameButton.Visible = 'on';
+            app.Instructions.Visible = 'on';
+            app.GermanPandaLabel.Visible = 'on';
+            app.Logo.Visible = 'on';
+            app.Heart1.Visible = 'off'; app.Heart2.Visible = 'off'; app.Heart3.Visible = 'off';
+            app.ScoreNumber.Visible = 'off'; app.TimerNumber.Visible = 'off'; app.Question.Visible = 'off';
+            app.TimerLabel.Visible = 'off'; app.ScoreLabel.Visible = 'off'; app.Bar.Visible = 'off';
+            app.Panda.Visible = 'off'; app.YourScoreLabel.Visible = 'off'; app.FinalScore.Visible = 'off';
+            app.GOAGAINBacktoStartButton.Visible = 'off'; app.Quit.Visible = 'on';
+            app.HighScoreNumber.Visible = 'on'; app.HighScoreLabel.Visible = 'on';
+            app.AddyourownwordsLabel.Visible = 'on'; app.Arrow.Visible = 'on'; app.AddButton.Visible = 'on';
+            app.GermanMeaningEditField.Visible = 'on'; app.EnglishWordEditField.Visible = 'on';
+            app.GermanMeaningEditFieldLabel.Visible = 'on'; app.EnglishWordEditFieldLabel.Visible = 'on';
+            app.ResetHighScoreButton.Visible = 'on'; app.MusicOnButton.Visible = 'on';
+            % hide end screen stuff, display start screen stuff
+
+        end
+
+        % Button pushed function: Quit
+        function QuitButtonPushed(app, event)
+            delete(app.UIFigure); % quit.
+        end
+
+        % Button pushed function: ResetHighScoreButton
+        function ResetHighScoreButtonPushed(app, event)
+            new = fopen('highscore.txt', 'w');
+            fprintf(new, '%d', 0); % set high score to 0
+            fclose(new);
+            app.HighScoreNumber.Text = num2str(0); % display 0
+        end
+
+        % Button pushed function: AddButton
+        function AddButtonPushed(app, event)
+            newWordEnglish = app.EnglishWordEditField.Value;
+            newWordGerman = app.GermanMeaningEditField.Value;
+
+            if ~isempty(newWordEnglish) && ~isempty(newWordGerman)
+                data = readtable('words.xlsx');
+
+                newData = [data; {newWordEnglish, newWordGerman}];
+
+                writetable(newData, 'words.xlsx');
+
+                msgbox('Words have been added to the list!', 'Success', 'modal');
+
+                app.EnglishWordEditField.Value = '';
+                app.GermanMeaningEditField.Value = '';
+            else
+                errordlg('Both fields must have text.', 'Error', 'modal');
+            end
+        end
+
+        % Button pushed function: MusicOnButton
+        function MusicOnButtonPushed(app, event)
+            if app.musicOn
+                app.musicOn = false;
+                app.MusicOnButton.Text = 'Music: Off';
+            else
+                app.musicOn = true;
+                app.MusicOnButton.Text = 'Music: On';
+            end
+        end
+
+        % Image clicked function: Exit
+        function ExitImageClicked(app, event)
+            app.lives = 0;
+        end
+    end
+
+    % Component initialization
+    methods (Access = private)
+
+        % Create UIFigure and components
+        function createComponents(app)
+
+            % Get the file path for locating images
+            pathToMLAPP = fileparts(mfilename('fullpath'));
+
+            % Create UIFigure and hide until all components are created
+            app.UIFigure = uifigure('Visible', 'off');
+            app.UIFigure.Color = [1 1 1];
+            app.UIFigure.Position = [100 100 640 700];
+            app.UIFigure.Name = 'MATLAB App';
+            app.UIFigure.Resize = 'off';
+            app.UIFigure.KeyPressFcn = createCallbackFcn(app, @UIFigureKeyPress, true);
+
+            % Create Image2
+            app.Image2 = uiimage(app.UIFigure);
+            app.Image2.Position = [-180 0 1002 800];
+            app.Image2.ImageSource = fullfile(pathToMLAPP, 'background.jpeg');
+
+            % Create Panda
+            app.Panda = uiimage(app.UIFigure);
+            app.Panda.Position = [290 49 60 98];
+            app.Panda.ImageSource = fullfile(pathToMLAPP, 'panda.png');
+
+            % Create img1
+            app.img1 = uiimage(app.UIFigure);
+            app.img1.Position = [84 808 100 43];
+            app.img1.ImageSource = fullfile(pathToMLAPP, 'bamboo.png');
+
+            % Create img2
+            app.img2 = uiimage(app.UIFigure);
+            app.img2.Position = [269 808 100 45];
+            app.img2.ImageSource = fullfile(pathToMLAPP, 'bamboo.png');
+
+            % Create img3
+            app.img3 = uiimage(app.UIFigure);
+            app.img3.Position = [454 808 100 45];
+            app.img3.ImageSource = fullfile(pathToMLAPP, 'bamboo.png');
+
+            % Create Label1
+            app.Label1 = uilabel(app.UIFigure);
+            app.Label1.HorizontalAlignment = 'center';
+            app.Label1.WordWrap = 'on';
+            app.Label1.FontWeight = 'bold';
+            app.Label1.FontColor = [1 0.9686 0.7294];
+            app.Label1.Position = [93 813 84 31];
+
+            % Create Label2
+            app.Label2 = uilabel(app.UIFigure);
+            app.Label2.HorizontalAlignment = 'center';
+            app.Label2.WordWrap = 'on';
+            app.Label2.FontWeight = 'bold';
+            app.Label2.FontColor = [1 0.9686 0.7294];
+            app.Label2.Position = [278 813 84 31];
+            app.Label2.Text = 'Label2';
+
+            % Create Label3
+            app.Label3 = uilabel(app.UIFigure);
+            app.Label3.HorizontalAlignment = 'center';
+            app.Label3.WordWrap = 'on';
+            app.Label3.FontWeight = 'bold';
+            app.Label3.FontColor = [1 0.9686 0.7294];
+            app.Label3.Position = [463 813 84 31];
+            app.Label3.Text = 'Label3';
+
+            % Create Bar
+            app.Bar = uiimage(app.UIFigure);
+            app.Bar.ScaleMethod = 'stretch';
+            app.Bar.Position = [1 0 641 59];
+            app.Bar.ImageSource = fullfile(pathToMLAPP, 'solid-teal-for-bottom.jpg');
+
+            % Create ScoreLabel
+            app.ScoreLabel = uilabel(app.UIFigure);
+            app.ScoreLabel.FontName = 'GungsuhChe';
+            app.ScoreLabel.FontSize = 18;
+            app.ScoreLabel.FontWeight = 'bold';
+            app.ScoreLabel.FontColor = [1 1 0];
+            app.ScoreLabel.Position = [546 34 82 25];
+            app.ScoreLabel.Text = 'Score:';
+
+            % Create TimerLabel
+            app.TimerLabel = uilabel(app.UIFigure);
+            app.TimerLabel.FontName = 'GungsuhChe';
+            app.TimerLabel.FontSize = 18;
+            app.TimerLabel.FontWeight = 'bold';
+            app.TimerLabel.FontColor = [1 0.3216 0];
+            app.TimerLabel.Position = [447 34 82 25];
+            app.TimerLabel.Text = 'Timer:';
+
+            % Create Question
+            app.Question = uilabel(app.UIFigure);
+            app.Question.HorizontalAlignment = 'center';
+            app.Question.FontSize = 24;
+            app.Question.FontWeight = 'bold';
+            app.Question.FontColor = [0 1 1];
+            app.Question.Position = [233 15 182 35];
+            app.Question.Text = '';
+
+            % Create TimerNumber
+            app.TimerNumber = uilabel(app.UIFigure);
+            app.TimerNumber.HorizontalAlignment = 'center';
+            app.TimerNumber.FontName = 'GungsuhChe';
+            app.TimerNumber.FontSize = 36;
+            app.TimerNumber.FontColor = [1 0.3216 0];
+            app.TimerNumber.Position = [439 -2 77 48];
+            app.TimerNumber.Text = '0';
+
+            % Create ScoreNumber
+            app.ScoreNumber = uilabel(app.UIFigure);
+            app.ScoreNumber.HorizontalAlignment = 'center';
+            app.ScoreNumber.FontName = 'GungsuhChe';
+            app.ScoreNumber.FontSize = 36;
+            app.ScoreNumber.FontColor = [1 1 0];
+            app.ScoreNumber.Position = [534 -2 77 48];
+            app.ScoreNumber.Text = '0';
+
+            % Create Heart3
+            app.Heart3 = uiimage(app.UIFigure);
+            app.Heart3.Position = [19 7 44 44];
+            app.Heart3.ImageSource = fullfile(pathToMLAPP, 'heart.png');
+
+            % Create Heart2
+            app.Heart2 = uiimage(app.UIFigure);
+            app.Heart2.Position = [70 7 44 44];
+            app.Heart2.ImageSource = fullfile(pathToMLAPP, 'heart.png');
+
+            % Create Heart1
+            app.Heart1 = uiimage(app.UIFigure);
+            app.Heart1.Position = [121 7 44 44];
+            app.Heart1.ImageSource = fullfile(pathToMLAPP, 'heart.png');
+
+            % Create StartGameButton
+            app.StartGameButton = uibutton(app.UIFigure, 'push');
+            app.StartGameButton.ButtonPushedFcn = createCallbackFcn(app, @StartGameButtonPushed, true);
+            app.StartGameButton.FontName = 'FangSong';
+            app.StartGameButton.FontSize = 36;
+            app.StartGameButton.FontWeight = 'bold';
+            app.StartGameButton.Position = [232 102 176 58];
+            app.StartGameButton.Text = 'Play';
+            app.StartGameButton.Icon = fullfile(pathToMLAPP, 'play_icon.png');
+
+            % Create Logo
+            app.Logo = uiimage(app.UIFigure);
+            app.Logo.Position = [228 524 186 150];
+            app.Logo.ImageSource = fullfile(pathToMLAPP, 'logo.png');
+
+            % Create GermanPandaLabel
+            app.GermanPandaLabel = uilabel(app.UIFigure);
+            app.GermanPandaLabel.HorizontalAlignment = 'center';
+            app.GermanPandaLabel.FontName = 'Bahnschrift';
+            app.GermanPandaLabel.FontSize = 40;
+            app.GermanPandaLabel.FontWeight = 'bold';
+            app.GermanPandaLabel.FontColor = [0.2902 0.2314 0.2];
+            app.GermanPandaLabel.Position = [186 487 271 50];
+            app.GermanPandaLabel.Text = 'German Panda';
+
+            % Create Instructions
+            app.Instructions = uilabel(app.UIFigure);
+            app.Instructions.FontName = 'Bahnschrift';
+            app.Instructions.FontWeight = 'bold';
+            app.Instructions.FontColor = [0.6196 0.1373 0.1373];
+            app.Instructions.Position = [164 317 361 177];
+            app.Instructions.Text = {''; '• Press Arrow key Left and Right to move the panda.'; ''; '• Make sure you position yourself to hit the correct answer.'; ''; '• Press Spacebar to quick-drop the answers.'; ''; '• You have 3 lives, you lose a life when you touch a wrong answer.'; ''; '• You won''t lose a life if you hit nothing, but you lose some Score.'; ''; '• The blocks fall faster as you gain Score.'};
+
+            % Create YourScoreLabel
+            app.YourScoreLabel = uilabel(app.UIFigure);
+            app.YourScoreLabel.FontName = 'GungsuhChe';
+            app.YourScoreLabel.FontSize = 36;
+            app.YourScoreLabel.FontWeight = 'bold';
+            app.YourScoreLabel.FontColor = [0.949 0.4196 0.2314];
+            app.YourScoreLabel.Position = [214 544 211 48];
+            app.YourScoreLabel.Text = 'Your Score:';
+
+            % Create FinalScore
+            app.FinalScore = uilabel(app.UIFigure);
+            app.FinalScore.HorizontalAlignment = 'center';
+            app.FinalScore.FontName = 'GungsuhChe';
+            app.FinalScore.FontSize = 48;
+            app.FinalScore.FontWeight = 'bold';
+            app.FinalScore.FontColor = [0.949 0.4196 0.2314];
+            app.FinalScore.Position = [225 475 183 70];
+            app.FinalScore.Text = '';
+
+            % Create GOAGAINBacktoStartButton
+            app.GOAGAINBacktoStartButton = uibutton(app.UIFigure, 'push');
+            app.GOAGAINBacktoStartButton.ButtonPushedFcn = createCallbackFcn(app, @GOAGAINBacktoStartButtonPushed, true);
+            app.GOAGAINBacktoStartButton.FontName = 'Bahnschrift';
+            app.GOAGAINBacktoStartButton.FontSize = 18;
+            app.GOAGAINBacktoStartButton.Position = [222 177 198 67];
+            app.GOAGAINBacktoStartButton.Text = {'GO AGAIN'; '(Back to Start)'};
+            app.GOAGAINBacktoStartButton.Icon = fullfile(pathToMLAPP, 'Go-back-icon.png');
+
+            % Create Quit
+            app.Quit = uibutton(app.UIFigure, 'push');
+            app.Quit.ButtonPushedFcn = createCallbackFcn(app, @QuitButtonPushed, true);
+            app.Quit.FontName = 'FangSong';
+            app.Quit.FontSize = 18;
+            app.Quit.FontWeight = 'bold';
+            app.Quit.Position = [270 57 100 31];
+            app.Quit.Text = 'Quit';
+            app.Quit.Icon = fullfile(pathToMLAPP, 'quit-icon.png');
+
+            % Create HighScoreLabel
+            app.HighScoreLabel = uilabel(app.UIFigure);
+            app.HighScoreLabel.FontName = 'GungsuhChe';
+            app.HighScoreLabel.FontSize = 24;
+            app.HighScoreLabel.FontWeight = 'bold';
+            app.HighScoreLabel.Position = [20 122 192 52];
+            app.HighScoreLabel.Text = 'High Score:';
+
+            % Create HighScoreNumber
+            app.HighScoreNumber = uilabel(app.UIFigure);
+            app.HighScoreNumber.HorizontalAlignment = 'center';
+            app.HighScoreNumber.FontName = 'GungsuhChe';
+            app.HighScoreNumber.FontSize = 24;
+            app.HighScoreNumber.FontWeight = 'bold';
+            app.HighScoreNumber.Position = [56 101 52 32];
+            app.HighScoreNumber.Text = '0';
+
+            % Create ResetHighScoreButton
+            app.ResetHighScoreButton = uibutton(app.UIFigure, 'push');
+            app.ResetHighScoreButton.ButtonPushedFcn = createCallbackFcn(app, @ResetHighScoreButtonPushed, true);
+            app.ResetHighScoreButton.FontName = 'Bahnschrift';
+            app.ResetHighScoreButton.FontSize = 9;
+            app.ResetHighScoreButton.Position = [39 74 86 22];
+            app.ResetHighScoreButton.Text = 'Reset High Score';
+
+            % Create EnglishWordEditFieldLabel
+            app.EnglishWordEditFieldLabel = uilabel(app.UIFigure);
+            app.EnglishWordEditFieldLabel.HorizontalAlignment = 'right';
+            app.EnglishWordEditFieldLabel.FontName = 'Bahnschrift';
+            app.EnglishWordEditFieldLabel.FontWeight = 'bold';
+            app.EnglishWordEditFieldLabel.Position = [220 262 76 22];
+            app.EnglishWordEditFieldLabel.Text = 'English Word';
+
+            % Create EnglishWordEditField
+            app.EnglishWordEditField = uieditfield(app.UIFigure, 'text');
+            app.EnglishWordEditField.Position = [311 262 100 22];
+
+            % Create GermanMeaningEditFieldLabel
+            app.GermanMeaningEditFieldLabel = uilabel(app.UIFigure);
+            app.GermanMeaningEditFieldLabel.HorizontalAlignment = 'right';
+            app.GermanMeaningEditFieldLabel.FontName = 'Bahnschrift';
+            app.GermanMeaningEditFieldLabel.FontWeight = 'bold';
+            app.GermanMeaningEditFieldLabel.Position = [200 232 96 22];
+            app.GermanMeaningEditFieldLabel.Text = 'German Meaning';
+
+            % Create GermanMeaningEditField
+            app.GermanMeaningEditField = uieditfield(app.UIFigure, 'text');
+            app.GermanMeaningEditField.Position = [311 232 100 22];
+
+            % Create AddButton
+            app.AddButton = uibutton(app.UIFigure, 'push');
+            app.AddButton.ButtonPushedFcn = createCallbackFcn(app, @AddButtonPushed, true);
+            app.AddButton.FontName = 'Bahnschrift';
+            app.AddButton.Position = [270 197 100 23];
+            app.AddButton.Text = 'Add';
+
+            % Create Arrow
+            app.Arrow = uiimage(app.UIFigure);
+            app.Arrow.Position = [395 156 166 174];
+            app.Arrow.ImageSource = fullfile(pathToMLAPP, 'red-arrow.png');
+
+            % Create AddyourownwordsLabel
+            app.AddyourownwordsLabel = uilabel(app.UIFigure);
+            app.AddyourownwordsLabel.FontName = 'Ink Free';
+            app.AddyourownwordsLabel.FontSize = 24;
+            app.AddyourownwordsLabel.FontWeight = 'bold';
+            app.AddyourownwordsLabel.FontColor = [1 0 0];
+            app.AddyourownwordsLabel.Position = [462 131 115 59];
+            app.AddyourownwordsLabel.Text = {'Add your '; 'own words!'};
+
+            % Create MusicOnButton
+            app.MusicOnButton = uibutton(app.UIFigure, 'push');
+            app.MusicOnButton.ButtonPushedFcn = createCallbackFcn(app, @MusicOnButtonPushed, true);
+            app.MusicOnButton.FontName = 'Bahnschrift';
+            app.MusicOnButton.Position = [502 651 100 23];
+            app.MusicOnButton.Text = 'Music: On';
+
+            % Create Exit
+            app.Exit = uiimage(app.UIFigure);
+            app.Exit.ImageClickedFcn = createCallbackFcn(app, @ExitImageClicked, true);
+            app.Exit.Position = [580 641 50 50];
+            app.Exit.ImageSource = fullfile(pathToMLAPP, 'exit.png');
+
+            % Show the figure after all components are created
+            app.UIFigure.Visible = 'on';
+        end
+    end
+
+    % App creation and deletion
+    methods (Access = public)
+
+        % Construct app
+        function app = AppGermanPanda
+
+            % Create UIFigure and components
+            createComponents(app)
+
+            % Register the app with App Designer
+            registerApp(app, app.UIFigure)
+
+            % Execute the startup function
+            runStartupFcn(app, @startupFcn)
+
+            if nargout == 0
+                clear app
+            end
+        end
+
+        % Code that executes before app deletion
+        function delete(app)
+
+            % Delete UIFigure when app is deleted
+            delete(app.UIFigure)
+        end
+    end
+end
